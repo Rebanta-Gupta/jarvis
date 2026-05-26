@@ -1,0 +1,14 @@
+# secrets - never upload this
+.env
+
+# python virtual environment - too large, not needed
+venv/
+
+# python cache files - auto-generated, not needed
+__pycache__/
+*.pyc
+*.pyo
+
+# editor folders
+.vscode/
+.idea/

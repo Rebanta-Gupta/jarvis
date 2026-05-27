@@ -211,4 +211,4 @@ def run_tool(name: str, args: dict) -> str:
     func = TOOL_FUNCTIONS.get(name)
     if not func:
         return f"Error: unknown tool '{name}'"
-    return str(func(**args))
+    return str(func(**(args or {})))  # ← args or {} handles None

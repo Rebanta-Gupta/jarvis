@@ -1,19 +1,16 @@
 from datetime import datetime
 import pytz
 
-def get_datetime(timezone: str = "UTC") -> str:
-    """Return the current date and time in the given timezone."""
+def get_datetime(timezone: str = "America/Vancouver") -> str:
     try:
         tz = pytz.timezone(timezone)
         now = datetime.now(tz)
         return now.strftime("%A, %B %d %Y — %I:%M %p (%Z)")
     except pytz.UnknownTimeZoneError:
-        # fallback to local system time
         now = datetime.now()
         return now.strftime("%A, %B %d %Y — %I:%M %p (local)")
 
-def get_date(timezone: str = "UTC") -> str:
-    """Return just today's date."""
+def get_date(timezone: str = "America/Vancouver") -> str:
     try:
         tz = pytz.timezone(timezone)
         now = datetime.now(tz)
@@ -21,8 +18,7 @@ def get_date(timezone: str = "UTC") -> str:
         now = datetime.now()
     return now.strftime("%A, %B %d %Y")
 
-def get_time(timezone: str = "UTC") -> str:
-    """Return just the current time."""
+def get_time(timezone: str = "America/Vancouver") -> str:
     try:
         tz = pytz.timezone(timezone)
         now = datetime.now(tz)

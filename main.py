@@ -36,21 +36,29 @@ def run_cli():
         print(f"Jarvis: {reply}\n")
 
 def run_voice():
-    """Voice loop — press Enter to speak, Jarvis replies out loud."""
     from voice.stt import listen
     from voice.tts import speak
+
+    EXIT_WORDS = {"goodbye", "exit", "quit", "stop", "bye"}
 
     print("Jarvis VOICE MODE — press Enter to speak, Ctrl+C to quit\n")
     while True:
         try:
             input("[ Press Enter to speak ]")
-            text = listen(duration=5)
+            text = listen()
 
             if not text:
-                print("[ Nothing heard, try again ]")
+                print("[ Nothing heard, try again ]\n")
                 continue
 
             print(f"You: {text}")
+
+            # voice exit command
+            if text.lower().strip(" .") in EXIT_WORDS:
+                speak("Goodbye!")
+                print("Goodbye.")
+                break
+
             reply = orc.turn(text)
             print(f"Jarvis: {reply}\n")
             speak(reply)
@@ -58,7 +66,7 @@ def run_voice():
         except KeyboardInterrupt:
             print("\nGoodbye.")
             break
-
+          
 if __name__ == "__main__":
     import sys
     start_reminder_watcher()

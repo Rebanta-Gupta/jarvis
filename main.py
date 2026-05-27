@@ -1,3 +1,4 @@
+import threading
 from fastapi import FastAPI
 from pydantic import BaseModel
 from core.orchestrator import Orchestrator
@@ -70,26 +71,30 @@ def run_voice():
 def run_wakeword():
     """
     Fully hands-free mode.
-    Say 'Hey Jarvis' → Jarvis listens → replies out loud.
+    Say 'Hey Jarvis' → listens → replies out loud.
+    Say 'Hey Jarvis' again while speaking to interrupt.
     Say 'goodbye' to exit.
     """
-    from voice.wakeword import wait_for_wake_word
+    from voice.wakeword import wait_for_wake_word, watch_for_interrupt
     from voice.stt import listen
     from voice.tts import speak
 
     EXIT_WORDS = {"goodbye", "exit", "quit", "stop", "bye"}
 
-    print("Jarvis WAKE WORD MODE — say 'Hey Jarvis' to activate, Ctrl+C to quit\n")
+    print("Jarvis WAKE WORD MODE")
+    print("Say 'Hey Jarvis' to activate")
+    print("Say 'Hey Jarvis' again while speaking to interrupt")
+    print("Press Ctrl+C to quit\n")
 
     while True:
         try:
             # Wait for wake word
             wait_for_wake_word()
 
-            # Acknowledge so user knows we're listening
+            # Acknowledge
             speak("Yeah?")
 
-            # Listen for the actual command
+            # Listen for command
             text = listen()
 
             if not text:
@@ -105,7 +110,35 @@ def run_wakeword():
 
             reply = orc.turn(text)
             print(f"Jarvis: {reply}\n")
+
+            # ── Speak with interrupt watcher running in background ──
+            tts_done   = threading.Event()  # signals TTS finished naturally
+            wake_fired = threading.Event()  # signals wake word interrupted
+
+            # Start interrupt watcher thread
+            watcher = threading.Thread(
+                target=watch_for_interrupt,
+                args=(tts_done, wake_fired),
+                daemon=True
+            )
+            watcher.start()
+
+            # Speak the reply (blocks until done or interrupted)
             speak(reply)
+
+            # Signal watcher to stop if TTS finished naturally
+            tts_done.set()
+            watcher.join(timeout=1)
+
+            # If wake word fired during speech, go straight to listening
+            if wake_fired.is_set():
+                print("[WakeWord] Interrupted — listening for new command...")
+                speak("Yeah?")
+                text = listen()
+                if text and text.lower().strip(" .") not in EXIT_WORDS:
+                    reply = orc.turn(text)
+                    print(f"Jarvis: {reply}\n")
+                    speak(reply)
 
         except KeyboardInterrupt:
             print("\nGoodbye.")

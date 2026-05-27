@@ -4,12 +4,12 @@ os.environ["PATH"] += os.pathsep + r"C:\Users\gupta\AppData\Local\Microsoft\WinG
 import pyaudio
 import numpy as np
 from openwakeword.model import Model
+import threading
 
-# ── Config ────────────────────────────────────────────────
 WAKE_WORD        = "hey_jarvis_v0.1"
-THRESHOLD        = 0.5   # 0.0–1.0, higher = less sensitive, fewer false triggers
+THRESHOLD        = 0.5
 SAMPLE_RATE      = 16000
-FRAME_SIZE       = 1280  # required by openwakeword
+FRAME_SIZE       = 1280
 FORMAT           = pyaudio.paInt16
 CHANNELS         = 1
 
@@ -27,13 +27,9 @@ def _get_model():
     return _model
 
 def wait_for_wake_word():
-    """
-    Block until 'Hey Jarvis' is detected.
-    Runs continuously in the foreground, uses minimal CPU.
-    """
+    """Block until 'Hey Jarvis' is detected."""
     model = _get_model()
     audio = pyaudio.PyAudio()
-
     stream = audio.open(
         format=FORMAT,
         channels=CHANNELS,
@@ -41,22 +37,49 @@ def wait_for_wake_word():
         input=True,
         frames_per_buffer=FRAME_SIZE,
     )
-
     try:
         while True:
-            # Read one frame of audio
             raw = stream.read(FRAME_SIZE, exception_on_overflow=False)
             frame = np.frombuffer(raw, dtype=np.int16)
-
-            # Run wake word detection
             model.predict(frame)
             scores = model.prediction_buffer.get(WAKE_WORD, [0])
             score = scores[-1] if len(scores) > 0 else 0
-
             if score >= THRESHOLD:
                 print(f"\n[WakeWord] 'Hey Jarvis' detected! (score: {score:.2f})")
-                # Flush the model buffer so it doesn't re-trigger immediately
                 model.reset()
+                break
+    finally:
+        stream.stop_stream()
+        stream.close()
+        audio.terminate()
+
+def watch_for_interrupt(stop_event: threading.Event, detected_event: threading.Event):
+    """
+    Run in a background thread while Jarvis is speaking.
+    Sets detected_event if wake word is heard, then sets stop_event.
+    """
+    model = _get_model()
+    audio = pyaudio.PyAudio()
+    stream = audio.open(
+        format=FORMAT,
+        channels=CHANNELS,
+        rate=SAMPLE_RATE,
+        input=True,
+        frames_per_buffer=FRAME_SIZE,
+    )
+    try:
+        while not stop_event.is_set():
+            raw = stream.read(FRAME_SIZE, exception_on_overflow=False)
+            frame = np.frombuffer(raw, dtype=np.int16)
+            model.predict(frame)
+            scores = model.prediction_buffer.get(WAKE_WORD, [0])
+            score = scores[-1] if len(scores) > 0 else 0
+            if score >= THRESHOLD:
+                print(f"\n[WakeWord] Interrupt detected! (score: {score:.2f})")
+                model.reset()
+                detected_event.set()  # signal that wake word fired
+                from voice.tts import stop_speaking
+                stop_speaking()       # cut TTS immediately
                 break
     finally:
         stream.stop_stream()

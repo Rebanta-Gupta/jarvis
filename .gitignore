@@ -1,10 +1,10 @@
-# secrets - never upload this
+# secrets
 .env
 
-# python virtual environment - too large, not needed
+# python virtual environment
 venv/
 
-# python cache files - auto-generated, not needed
+# python cache
 __pycache__/
 *.pyc
 *.pyo
@@ -12,3 +12,17 @@ __pycache__/
 # editor folders
 .vscode/
 .idea/
+
+# jarvis data — contains conversation history and personal facts
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# audio temp files
+*.mp3
+*.wav
+*.tmp
+
+# whisper model cache
+~/.cache/whisper/

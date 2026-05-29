@@ -3,6 +3,7 @@ from tools.weather import get_weather
 from tools.timers import set_timer, cancel_timer, list_timers
 from tools.notes import add_note, get_notes, delete_note
 from tools.reminders import set_reminder, list_reminders, cancel_reminder
+from tools.memory_tools import remember_fact, forget_fact, forget_all, recall_facts
 
 TOOL_DEFINITIONS = [
     # ── Time ──────────────────────────────────────────────
@@ -53,11 +54,11 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_weather",
-            "description": "Get current weather for a city. Use when the user asks about weather, temperature, or conditions.",
+            "description": "Get current weather for any city worldwide.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "city": {"type": "string", "description": "City name e.g. 'Vancouver', 'Toronto', 'London'"}
+                    "city": {"type": "string", "description": "City name e.g. 'Vancouver', 'Tokyo', 'Maple Ridge'"}
                 },
                 "required": ["city"],
             },
@@ -110,14 +111,8 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "content": {
-                        "type": "string",
-                        "description": "The full text content of the note to save"
-                    },
-                    "title": {
-                        "type": "string",
-                        "description": "Optional short title for the note"
-                    }
+                    "content": {"type": "string", "description": "The full text content of the note to save"},
+                    "title":   {"type": "string", "description": "Optional short title for the note"}
                 },
                 "required": ["content"],
             },
@@ -156,11 +151,11 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "set_reminder",
-            "description": "Set a reminder for N minutes from now. Use when the user says 'remind me in X minutes'.",
+            "description": "Set a reminder for N minutes from now.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "message": {"type": "string", "description": "What to remind the user about"},
+                    "message":         {"type": "string",  "description": "What to remind the user about"},
                     "minutes_from_now": {"type": "integer", "description": "How many minutes until the reminder fires"}
                 },
                 "required": ["message", "minutes_from_now"],
@@ -189,26 +184,91 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    # ── Memory ────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "remember_fact",
+            "description": (
+                "Store or update a fact about the user. Use when the user says "
+                "'remember that', 'my X is Y', or wants to correct something you know."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key":   {"type": "string", "description": "Short snake_case identifier e.g. 'user_name', 'favourite_colour'"},
+                    "value": {"type": "string", "description": "The value to store"}
+                },
+                "required": ["key", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "forget_fact",
+            "description": (
+                "Delete a specific stored fact. Use when the user says "
+                "'forget that', 'that's wrong', or wants to remove something you know."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "The fact key to delete e.g. 'user_name'"}
+                },
+                "required": ["key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "forget_all",
+            "description": "Delete ALL stored facts about the user. Use only when explicitly asked to forget everything.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recall_facts",
+            "description": (
+                "List what Jarvis knows about the user. Use when asked "
+                "'what do you know about me', 'what have you remembered', etc."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Optional search term to filter facts"}
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 TOOL_FUNCTIONS = {
-    "get_datetime": get_datetime,
-    "get_date": get_date,
-    "get_time": get_time,
-    "get_weather": get_weather,
-    "set_timer": set_timer,
-    "cancel_timer": cancel_timer,
-    "list_timers": list_timers,
-    "add_note": add_note,
-    "get_notes": get_notes,
-    "delete_note": delete_note,
-    "set_reminder": set_reminder,
-    "list_reminders": list_reminders,
+    "get_datetime":    get_datetime,
+    "get_date":        get_date,
+    "get_time":        get_time,
+    "get_weather":     get_weather,
+    "set_timer":       set_timer,
+    "cancel_timer":    cancel_timer,
+    "list_timers":     list_timers,
+    "add_note":        add_note,
+    "get_notes":       get_notes,
+    "delete_note":     delete_note,
+    "set_reminder":    set_reminder,
+    "list_reminders":  list_reminders,
     "cancel_reminder": cancel_reminder,
+    "remember_fact":   remember_fact,
+    "forget_fact":     forget_fact,
+    "forget_all":      forget_all,
+    "recall_facts":    recall_facts,
 }
 
 def run_tool(name: str, args: dict) -> str:
     func = TOOL_FUNCTIONS.get(name)
     if not func:
         return f"Error: unknown tool '{name}'"
-    return str(func(**(args or {})))  # ← args or {} handles None
+    return str(func(**(args or {})))

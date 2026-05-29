@@ -1,9 +1,10 @@
 from groq import Groq
-from config import GROQ_API_KEY, SYSTEM_PROMPT
+from config import GROQ_API_KEY
 import json
 import re
 
 client = Groq(api_key=GROQ_API_KEY)
+
 
 def _parse_failed_generation(error_str: str) -> dict | None:
     """
@@ -11,14 +12,12 @@ def _parse_failed_generation(error_str: str) -> dict | None:
     function call. We parse it manually and execute it ourselves.
     Example: <function=add_note>{'content': 'buy groceries'}</function>
     """
-    # Extract function name
     name_match = re.search(r"<function=(\w+)>", error_str)
     if not name_match:
         return None
 
     name = name_match.group(1)
 
-    # Extract arguments — try JSON first, then Python dict literal
     args_match = re.search(r"<function=\w+>(.+?)</function>", error_str, re.DOTALL)
     if not args_match:
         return None
@@ -26,27 +25,30 @@ def _parse_failed_generation(error_str: str) -> dict | None:
     raw_args = args_match.group(1).strip()
 
     try:
-        # Try proper JSON first
         args = json.loads(raw_args)
     except json.JSONDecodeError:
         try:
-            # Fall back to Python literal (handles single quotes)
             import ast
             args = ast.literal_eval(raw_args)
         except Exception:
             return None
 
-    return {"id": "manual_parse", "name": name, "args": args}
+    import uuid
+    return {"id": f"call_{uuid.uuid4().hex[:8]}", "name": name, "args": args}
 
-def chat(messages: list[dict], tools: list[dict] = None) -> dict:
+
+def chat(messages: list[dict], tools: list[dict] = None, system_prompt: str = "") -> dict:
     """
     Send a conversation to the LLM.
     Returns {"content": str, "tool_call": dict | None}
+
+    system_prompt: pass the pre-built prompt from build_system_prompt()
+                   so memory is injected per-turn.
     """
     kwargs = {
         "model": "llama-3.3-70b-versatile",
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             *messages,
         ],
         "max_tokens": 512,
@@ -78,13 +80,11 @@ def chat(messages: list[dict], tools: list[dict] = None) -> dict:
         error = str(e)
 
         if "tool_use_failed" in error or "Failed to call a function" in error:
-            # Try to salvage the tool call from the error message
             parsed = _parse_failed_generation(error)
             if parsed:
                 print(f"[debug] tool_use_failed — salvaging '{parsed['name']}' call")
                 return {"content": None, "tool_call": parsed}
 
-            # Nothing salvageable — fall back to plain chat
             print("[debug] tool_use_failed — could not parse, falling back to plain chat")
             kwargs.pop("tools", None)
             kwargs.pop("tool_choice", None)
@@ -95,3 +95,20 @@ def chat(messages: list[dict], tools: list[dict] = None) -> dict:
             }
 
         raise
+
+
+def quick_extract(prompt: str, system_prompt: str = "") -> str:
+    """
+    Cheap single-turn call used by MemoryManager for fact extraction.
+    No tools, low temperature for deterministic JSON output.
+    """
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": system_prompt or "You are a precise data extractor. Output only valid JSON."},
+            {"role": "user", "content": prompt},
+        ],
+        max_tokens=200,
+        temperature=0.0,
+    )
+    return response.choices[0].message.content or "{}"

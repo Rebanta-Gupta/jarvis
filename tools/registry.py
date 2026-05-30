@@ -1,17 +1,17 @@
-from tools.system import get_datetime, get_date, get_time
-from tools.weather import get_weather
-from tools.timers import set_timer, cancel_timer, list_timers
-from tools.notes import add_note, get_notes, delete_note
+from tools.system    import get_datetime, get_date, get_time
+from tools.weather   import get_weather
+from tools.timers    import set_timer, cancel_timer, list_timers, get_timer_remaining
+from tools.notes     import add_note, get_notes, search_notes, delete_note
 from tools.reminders import set_reminder, list_reminders, cancel_reminder
 from tools.memory_tools import remember_fact, forget_fact, forget_all, recall_facts
 
 TOOL_DEFINITIONS = [
-    # ── Time ──────────────────────────────────────────────
+    # ── Time ──────────────────────────────────────────────────────────────────
     {
         "type": "function",
         "function": {
             "name": "get_datetime",
-            "description": "Get the current date and time. Use for any time or date question.",
+            "description": "Get the current date AND time together. Use for 'what time is it', 'what's today's date', or any combined date-time question.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -25,11 +25,11 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_time",
-            "description": "Get the current time only.",
+            "description": "Get the current time only (no date). Use when the user asks specifically for the time.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "timezone": {"type": "string", "description": "IANA timezone string."}
+                    "timezone": {"type": "string"}
                 },
                 "required": [],
             },
@@ -39,22 +39,22 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_date",
-            "description": "Get today's date only.",
+            "description": "Get today's date only (no time). Use when the user asks specifically for the date or day.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "timezone": {"type": "string", "description": "IANA timezone string."}
+                    "timezone": {"type": "string"}
                 },
                 "required": [],
             },
         },
     },
-    # ── Weather ───────────────────────────────────────────
+    # ── Weather ────────────────────────────────────────────────────────────────
     {
         "type": "function",
         "function": {
             "name": "get_weather",
-            "description": "Get current weather for any city worldwide.",
+            "description": "Get current weather conditions for any city worldwide.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -64,7 +64,7 @@ TOOL_DEFINITIONS = [
             },
         },
     },
-    # ── Timers ────────────────────────────────────────────
+    # ── Timers ─────────────────────────────────────────────────────────────────
     {
         "type": "function",
         "function": {
@@ -73,8 +73,8 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "duration_seconds": {"type": "integer", "description": "Timer duration in seconds"},
-                    "label": {"type": "string", "description": "A short name for the timer e.g. 'pasta', 'workout'"}
+                    "duration_seconds": {"type": "integer", "description": "Timer duration in seconds. Convert minutes to seconds first."},
+                    "label": {"type": "string", "description": "Short name for the timer e.g. 'pasta', 'workout'"}
                 },
                 "required": ["duration_seconds"],
             },
@@ -88,7 +88,21 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "label": {"type": "string", "description": "The timer label to cancel"}
+                    "label": {"type": "string"}
+                },
+                "required": ["label"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_timer_remaining",
+            "description": "Check how much time is left on an active timer.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "label": {"type": "string"}
                 },
                 "required": ["label"],
             },
@@ -98,21 +112,21 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "list_timers",
-            "description": "List all currently active timers.",
+            "description": "List all currently active timers with remaining time.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
-    # ── Notes ─────────────────────────────────────────────
+    # ── Notes ──────────────────────────────────────────────────────────────────
     {
         "type": "function",
         "function": {
             "name": "add_note",
-            "description": "Save a note. Use when the user says 'note that', 'remember this', or 'write this down'.",
+            "description": "Save a note. Use when the user says 'note that', 'write this down', or 'remember this'.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "content": {"type": "string", "description": "The full text content of the note to save"},
-                    "title":   {"type": "string", "description": "Optional short title for the note"}
+                    "content": {"type": "string", "description": "The full text of the note"},
+                    "title":   {"type": "string", "description": "Optional short title"}
                 },
                 "required": ["content"],
             },
@@ -122,7 +136,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_notes",
-            "description": "Read back saved notes. Use when the user asks to see their notes.",
+            "description": "Read back recent notes.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -135,18 +149,32 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "search_notes",
+            "description": "Search notes by keyword. Use when the user asks to find a specific note.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Keyword to search for"}
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "delete_note",
             "description": "Delete a note by its ID number.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "note_id": {"type": "integer", "description": "The ID of the note to delete"}
+                    "note_id": {"type": "integer"}
                 },
                 "required": ["note_id"],
             },
         },
     },
-    # ── Reminders ─────────────────────────────────────────
+    # ── Reminders ──────────────────────────────────────────────────────────────
     {
         "type": "function",
         "function": {
@@ -155,7 +183,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "message":         {"type": "string",  "description": "What to remind the user about"},
+                    "message":          {"type": "string",  "description": "What to remind the user about"},
                     "minutes_from_now": {"type": "integer", "description": "How many minutes until the reminder fires"}
                 },
                 "required": ["message", "minutes_from_now"],
@@ -166,7 +194,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "list_reminders",
-            "description": "List all upcoming reminders.",
+            "description": "List all upcoming (unfired) reminders.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
@@ -178,26 +206,23 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "reminder_id": {"type": "integer", "description": "The ID of the reminder to cancel"}
+                    "reminder_id": {"type": "integer"}
                 },
                 "required": ["reminder_id"],
             },
         },
     },
-    # ── Memory ────────────────────────────────────────────
+    # ── Memory ─────────────────────────────────────────────────────────────────
     {
         "type": "function",
         "function": {
             "name": "remember_fact",
-            "description": (
-                "Store or update a fact about the user. Use when the user says "
-                "'remember that', 'my X is Y', or wants to correct something you know."
-            ),
+            "description": "Store or update a fact about the user. Use when they say 'remember that', 'my X is Y'.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "key":   {"type": "string", "description": "Short snake_case identifier e.g. 'user_name', 'favourite_colour'"},
-                    "value": {"type": "string", "description": "The value to store"}
+                    "key":   {"type": "string", "description": "snake_case identifier e.g. 'favourite_colour'"},
+                    "value": {"type": "string"}
                 },
                 "required": ["key", "value"],
             },
@@ -207,14 +232,11 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "forget_fact",
-            "description": (
-                "Delete a specific stored fact. Use when the user says "
-                "'forget that', 'that's wrong', or wants to remove something you know."
-            ),
+            "description": "Delete a specific stored fact.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string", "description": "The fact key to delete e.g. 'user_name'"}
+                    "key": {"type": "string"}
                 },
                 "required": ["key"],
             },
@@ -224,7 +246,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "forget_all",
-            "description": "Delete ALL stored facts about the user. Use only when explicitly asked to forget everything.",
+            "description": "Delete ALL stored facts. Only use when the user explicitly asks to forget everything.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
@@ -232,14 +254,11 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "recall_facts",
-            "description": (
-                "List what Jarvis knows about the user. Use when asked "
-                "'what do you know about me', 'what have you remembered', etc."
-            ),
+            "description": "List what Jarvis knows about the user.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Optional search term to filter facts"}
+                    "query": {"type": "string", "description": "Optional keyword filter"}
                 },
                 "required": [],
             },
@@ -248,27 +267,36 @@ TOOL_DEFINITIONS = [
 ]
 
 TOOL_FUNCTIONS = {
-    "get_datetime":    get_datetime,
-    "get_date":        get_date,
-    "get_time":        get_time,
-    "get_weather":     get_weather,
-    "set_timer":       set_timer,
-    "cancel_timer":    cancel_timer,
-    "list_timers":     list_timers,
-    "add_note":        add_note,
-    "get_notes":       get_notes,
-    "delete_note":     delete_note,
-    "set_reminder":    set_reminder,
-    "list_reminders":  list_reminders,
-    "cancel_reminder": cancel_reminder,
-    "remember_fact":   remember_fact,
-    "forget_fact":     forget_fact,
-    "forget_all":      forget_all,
-    "recall_facts":    recall_facts,
+    "get_datetime":       get_datetime,
+    "get_date":           get_date,
+    "get_time":           get_time,
+    "get_weather":        get_weather,
+    "set_timer":          set_timer,
+    "cancel_timer":       cancel_timer,
+    "get_timer_remaining": get_timer_remaining,
+    "list_timers":        list_timers,
+    "add_note":           add_note,
+    "get_notes":          get_notes,
+    "search_notes":       search_notes,
+    "delete_note":        delete_note,
+    "set_reminder":       set_reminder,
+    "list_reminders":     list_reminders,
+    "cancel_reminder":    cancel_reminder,
+    "remember_fact":      remember_fact,
+    "forget_fact":        forget_fact,
+    "forget_all":         forget_all,
+    "recall_facts":       recall_facts,
 }
 
+
 def run_tool(name: str, args: dict) -> str:
+    """Dispatch a tool call. Always returns a string — never raises."""
     func = TOOL_FUNCTIONS.get(name)
     if not func:
         return f"Error: unknown tool '{name}'"
-    return str(func(**(args or {})))
+    try:
+        return str(func(**(args or {})))
+    except TypeError as e:
+        return f"Error calling '{name}': bad arguments — {e}"
+    except Exception as e:
+        return f"Error calling '{name}': {e}"

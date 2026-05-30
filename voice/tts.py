@@ -1,24 +1,30 @@
-import edge_tts
 import asyncio
-import tempfile
 import os
-import sounddevice as sd
-import soundfile as sf
+import tempfile
 import threading
 
-VOICE = "en-US-GuyNeural"
+import edge_tts
+import sounddevice as sd
+import soundfile as sf
+
+from config import TTS_VOICE
 
 _stop_event = threading.Event()
 
-def stop_speaking():
-    """Call this from any thread to interrupt playback."""
-    _stop_event.set()
-    sd.stop()  # immediately kills sounddevice playback
 
-async def _synthesize(text: str, path: str, retries: int = 3):
+def stop_speaking() -> None:
+    """Call from any thread to interrupt playback immediately."""
+    _stop_event.set()
+    try:
+        sd.stop()
+    except Exception:
+        pass
+
+
+async def _synthesize(text: str, path: str, retries: int = 3) -> None:
     for attempt in range(retries):
         try:
-            communicate = edge_tts.Communicate(text, VOICE)
+            communicate = edge_tts.Communicate(text, TTS_VOICE)
             await communicate.save(path)
             return
         except Exception as e:
@@ -29,11 +35,9 @@ async def _synthesize(text: str, path: str, retries: int = 3):
             else:
                 raise
 
-def speak(text: str):
-    """
-    Convert text to speech and play it.
-    Interrupted immediately if stop_speaking() is called.
-    """
+
+def speak(text: str) -> None:
+    """Convert text to speech and play it. Interruptible via stop_speaking()."""
     if not text or not text.strip():
         return
 
@@ -49,12 +53,16 @@ def speak(text: str):
             return
 
         data, sample_rate = sf.read(tmp_path)
-
-        # Play the full audio — sd.stop() from another thread cuts it instantly
         sd.play(data, sample_rate)
 
-        # Wait, but check stop flag every 100ms
-        while sd.get_stream().active:
+        # Poll until done or interrupted
+        while True:
+            try:
+                active = sd.get_stream().active
+            except Exception:
+                break   # stream closed or not available — treat as done
+            if not active:
+                break
             if _stop_event.is_set():
                 sd.stop()
                 print("[TTS] Playback interrupted.")

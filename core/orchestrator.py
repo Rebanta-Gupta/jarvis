@@ -1,18 +1,19 @@
+import re
+import threading
 from core.llm import chat, quick_extract
 from tools.registry import TOOL_DEFINITIONS, run_tool
 from tools.system import get_datetime
-from config import build_system_prompt
+from config import build_system_prompt, DEFAULT_TIMEZONE
 from memory.manager import MemoryManager
-import re
 
-# Fast path: time queries bypass LLM entirely
-TIME_PATTERNS = re.compile(
+# ── Fast-path regex — time queries bypass the LLM entirely ──────────────────
+_TIME_RE = re.compile(
     r"\b(what'?s? (the )?(time|date|day)|current time|time (is it|right now)|"
     r"what time|tell me the time|time in \w+|date today|today'?s? date)\b",
-    re.IGNORECASE
+    re.IGNORECASE,
 )
 
-TIMEZONE_MAP = {
+_TIMEZONE_MAP = {
     "vancouver": "America/Vancouver",
     "pacific":   "America/Vancouver",
     "pst":       "America/Vancouver",
@@ -25,78 +26,108 @@ TIMEZONE_MAP = {
     "utc":       "UTC",
 }
 
+# Maximum turns kept in memory to stay within the LLM context window.
+# Each turn = 1 user + 1 assistant message, so this is 2 × CONTEXT_TURNS items.
+_MAX_HISTORY = 60   # 30 turns
+
+# Maximum sequential tool calls per turn (prevents infinite loops)
+_MAX_TOOL_CALLS = 5
+
+
 def _extract_timezone(text: str) -> str:
-    text_lower = text.lower()
-    for keyword, tz in TIMEZONE_MAP.items():
-        if keyword in text_lower:
+    lower = text.lower()
+    for keyword, tz in _TIMEZONE_MAP.items():
+        if keyword in lower:
             return tz
-    return "America/Vancouver"
+    return DEFAULT_TIMEZONE
 
 
 class Orchestrator:
     def __init__(self):
-        self.memory = MemoryManager()
-        # Seed history from DB so conversation continues across restarts
+        self.memory  = MemoryManager()
         self.history: list[dict] = self.memory.get_history()
+        self._lock   = threading.Lock()   # safe for concurrent FastAPI requests
+
+    # ── Public API ──────────────────────────────────────────────────────────
 
     def turn(self, user_input: str) -> str:
-        self.history.append({"role": "user", "content": user_input})
+        """Process one user turn and return Jarvis's reply."""
+        with self._lock:
+            return self._turn(user_input)
 
-        # Extract facts from user input (rule-based always; LLM-assisted when signals present)
-        self.memory.maybe_extract_facts(
-            user_input,
-            llm_caller=quick_extract   # passes the cheap extractor
-        )
+    def reset(self, clear_db: bool = False) -> None:
+        """
+        Clear in-session history.
+        Pass clear_db=True to also wipe the conversation log from SQLite.
+        """
+        with self._lock:
+            self.history = []
+            if clear_db:
+                self.memory.clear_history()
+
+    # ── Internal ────────────────────────────────────────────────────────────
+
+    def _turn(self, user_input: str) -> str:
+        self.history.append({"role": "user", "content": user_input})
+        self._trim_history()
+
+        # Passive fact extraction (rule-based always; LLM-assisted on signal)
+        self.memory.maybe_extract_facts(user_input, llm_caller=quick_extract)
 
         # ── Fast path: time queries ──────────────────────────────────────
-        if TIME_PATTERNS.search(user_input):
-            tz = _extract_timezone(user_input)
+        if _TIME_RE.search(user_input):
+            tz     = _extract_timezone(user_input)
             result = get_datetime(timezone=tz)
-            reply = f"It's {result}."
+            reply  = f"It's {result}."
             self._save_turn(user_input, reply)
             return reply
 
-        # ── Build system prompt with current memory state ────────────────
-        memory_block = self.memory.build_memory_block()
+        # ── Normal LLM path ──────────────────────────────────────────────
+        memory_block  = self.memory.build_memory_block()
         system_prompt = build_system_prompt(memory_block)
 
-        # ── Normal LLM path ──────────────────────────────────────────────
         result = chat(self.history, tools=TOOL_DEFINITIONS, system_prompt=system_prompt)
 
-        if result["tool_call"]:
-            tc = result["tool_call"]
+        # ── Tool call loop (up to _MAX_TOOL_CALLS sequential calls) ──────
+        calls_made = 0
+        while result["tool_call"] and calls_made < _MAX_TOOL_CALLS:
+            tc          = result["tool_call"]
             tool_result = run_tool(tc["name"], tc["args"])
+            calls_made += 1
 
             self.history.append({
-                "role": "assistant",
-                "content": None,
+                "role":       "assistant",
+                "content":    None,
                 "tool_calls": [{
-                    "id": tc["id"],
-                    "type": "function",
+                    "id":       tc["id"],
+                    "type":     "function",
                     "function": {
-                        "name": tc["name"],
+                        "name":      tc["name"],
                         "arguments": str(tc["args"]),
-                    }
-                }]
+                    },
+                }],
             })
             self.history.append({
-                "role": "tool",
+                "role":         "tool",
                 "tool_call_id": tc["id"],
-                "content": tool_result,
+                "content":      tool_result,
             })
 
+            self._trim_history()
             result = chat(self.history, tools=TOOL_DEFINITIONS, system_prompt=system_prompt)
 
-        reply = result["content"]
+        reply = result["content"] or "I couldn't come up with a response — please try again."
         self._save_turn(user_input, reply)
         return reply
 
-    def _save_turn(self, user_input: str, reply: str):
-        """Persist the completed turn and update in-memory history."""
-        self.memory.save("user", user_input)
+    def _save_turn(self, user_input: str, reply: str) -> None:
+        """Persist completed turn and append assistant message to history."""
+        self.memory.save("user",      user_input)
         self.memory.save("assistant", reply)
         self.history.append({"role": "assistant", "content": reply})
+        self._trim_history()
 
-    def reset(self):
-        """Clear in-session history (DB log is preserved)."""
-        self.history = []
+    def _trim_history(self) -> None:
+        """Keep history within _MAX_HISTORY to avoid context window overflow."""
+        if len(self.history) > _MAX_HISTORY:
+            self.history = self.history[-_MAX_HISTORY:]

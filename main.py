@@ -1,9 +1,11 @@
+import os
 import sys
 import signal
 import threading
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
+from typing import Optional
 
 from core.orchestrator import Orchestrator
 from tools.reminders import start_reminder_watcher
@@ -14,25 +16,38 @@ orc = Orchestrator()
 
 EXIT_WORDS = {"goodbye", "exit", "quit", "stop", "bye"}
 
+# ── API key auth ─────────────────────────────────────────────────────────────
+# Set JARVIS_API_KEY in your cloud platform's environment variables (e.g. Render dashboard).
+# Leave unset for local development — auth is skipped when no key is configured.
+_API_KEY = os.getenv("JARVIS_API_KEY", "")
+
+def _check_auth(x_api_key: Optional[str]) -> None:
+    """Raise 401 if an API key is configured and the request doesn't match."""
+    if _API_KEY and x_api_key != _API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key.")
+
 
 class Message(BaseModel):
     text: str
 
 
 @app.post("/chat")
-def chat_endpoint(msg: Message):
+def chat_endpoint(msg: Message, x_api_key: Optional[str] = Header(default=None)):
+    _check_auth(x_api_key)
     reply = orc.turn(msg.text)
     return {"reply": reply}
 
 
 @app.post("/reset")
-def reset_endpoint():
+def reset_endpoint(x_api_key: Optional[str] = Header(default=None)):
+    _check_auth(x_api_key)
     orc.reset()
     return {"status": "conversation cleared"}
 
 
 @app.get("/health")
 def health():
+    # Health check is public — Render uses this to verify the container is up
     return {"status": "ok"}
 
 

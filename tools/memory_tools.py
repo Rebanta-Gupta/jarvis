@@ -53,8 +53,10 @@ def recall_facts(query: str = "") -> str:
         facts = get_all_facts()
 
     if not facts:
-        return "I don't have anything stored about you yet." if not query else f"Nothing stored matching '{query}'."
+        if query.strip():
+            return f"Nothing stored matching '{query}'."
+        return "I don't have anything stored about you yet."
 
     lines = [f"  • {f['key'].replace('_', ' ')}: {f['value']}" for f in facts]
-    header = "Here's everything I know about you:" if not query else f"What I know matching '{query}':"
-    return f"{header}\n" + "\n".join(lines)
+    header = "Here's everything I know about you:" if not query.strip() else f"What I know matching '{query}':"
+    return header + "\n" + "\n".join(lines)

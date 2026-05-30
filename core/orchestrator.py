@@ -84,7 +84,10 @@ class Orchestrator:
 
         # ── Normal LLM path ──────────────────────────────────────────────
         memory_block  = self.memory.build_memory_block()
-        system_prompt = build_system_prompt(memory_block)
+        # Inject current time so model can resolve absolute times like "at 10pm"
+        # into minutes_from_now without a wasted extra tool call
+        current_time  = get_datetime(timezone=DEFAULT_TIMEZONE)
+        system_prompt = build_system_prompt(memory_block, current_time=current_time)
 
         result = chat(self.history, tools=TOOL_DEFINITIONS, system_prompt=system_prompt)
 

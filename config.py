@@ -17,7 +17,7 @@ if not GROQ_API_KEY:
 ASSISTANT_NAME   = os.getenv("ASSISTANT_NAME",   "Jarvis")
 DEFAULT_TIMEZONE = os.getenv("TIMEZONE",          "America/Vancouver")
 LLM_MODEL        = os.getenv("LLM_MODEL",         "llama-3.3-70b-versatile")
-LLM_MAX_TOKENS   = int(os.getenv("LLM_MAX_TOKENS", "1024"))
+LLM_MAX_TOKENS   = int(os.getenv("LLM_MAX_TOKENS", "512"))
 LLM_TEMPERATURE  = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 TTS_VOICE        = os.getenv("TTS_VOICE",         "en-US-GuyNeural")
 WAKE_WORD        = os.getenv("WAKE_WORD",         "hey_jarvis_v0.1")
@@ -42,10 +42,25 @@ RULES:
 - Always pass numeric arguments as numbers, never as strings.
 - Stored facts may be outdated — if something seems inconsistent, ask to confirm.
 - Use user facts naturally — don't announce that you remember them, just use them when relevant.
+
+REMINDERS AT ABSOLUTE TIMES (e.g. "remind me at 10pm"):
+- First call get_datetime to get the current time, then calculate minutes_from_now yourself.
+- Do NOT write the function call in your response text. Always use the tool properly.
+- Example: if it is 9:00 PM and the user says "remind me at 10 PM", call set_reminder with minutes_from_now=60.
+
+TOOL HONESTY RULES — CRITICAL:
+- You have real working tools listed above. They are NOT simulated. They work.
+- Never tell the user that your tools are simulated, fake, or for demonstration purposes.
+- Never tell the user you cannot interact with external systems — you can, via your tools.
+- Never expose raw function call syntax like <function=name>{{...}}</function> in your replies.
+- If a tool call fails, say "I had trouble with that, please try again" — nothing more.
 """
 
-def build_system_prompt(memory_block: str = "") -> str:
-    """Build the full system prompt, injecting memory block if present."""
+def build_system_prompt(memory_block: str = "", current_time: str = "") -> str:
+    """Build the full system prompt, injecting memory block and current time if present."""
+    prompt = _BASE_PROMPT
+    if current_time:
+        prompt += f"\n[Current time: {current_time}]"
     if memory_block:
-        return f"{_BASE_PROMPT}\n\n{memory_block}"
-    return _BASE_PROMPT
+        prompt += f"\n\n{memory_block}"
+    return prompt

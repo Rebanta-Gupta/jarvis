@@ -10,8 +10,43 @@ from config import GROQ_API_KEY, LLM_MODEL, LLM_MAX_TOKENS, LLM_TEMPERATURE
 
 client = Groq(api_key=GROQ_API_KEY)
 
-_RETRYABLE = (RateLimitError, APIConnectionError)
 _MAX_RETRIES = 3
+
+# ── Model fallback chain ─────────────────────────────────────────────────────
+# If the primary model hits its daily token limit, we automatically step down
+# to the next model in the chain. llama-3.1-8b-instant has 500k TPD vs 70b's 100k.
+# Both are free on Groq's free tier.
+_MODEL_FALLBACK_CHAIN = [
+    LLM_MODEL,                  # primary  — llama-3.3-70b-versatile (from config / .env)
+    "llama-3.1-8b-instant",     # fallback — 500k TPD, still handles tool calls
+]
+
+# Track which model we're currently using so the fallback persists for the
+# whole session — we don't flip back and forth on every call.
+_current_model_index = 0
+
+
+def _current_model() -> str:
+    return _MODEL_FALLBACK_CHAIN[min(_current_model_index, len(_MODEL_FALLBACK_CHAIN) - 1)]
+
+
+def _fallback_model() -> bool:
+    """
+    Step down to the next model in the chain.
+    Returns True if a fallback was available, False if already at the end.
+    """
+    global _current_model_index
+    if _current_model_index < len(_MODEL_FALLBACK_CHAIN) - 1:
+        _current_model_index += 1
+        print(f"[LLM] Falling back to '{_current_model()}' due to rate limit on primary model.")
+        return True
+    return False
+
+
+def _is_tpd_limit(error: RateLimitError) -> bool:
+    """Distinguish daily token limit (TPD) from per-minute rate limit (TPM)."""
+    msg = str(error).lower()
+    return "tokens per day" in msg or "tpd" in msg
 
 
 def _parse_failed_generation(error_str: str) -> dict | None:
@@ -52,23 +87,26 @@ def chat(
     Returns:
         {"content": str | None, "tool_call": dict | None}
 
-    Retries on rate-limit and connection errors with exponential backoff.
-    Falls back to plain chat if tool_use_failed and the call can't be parsed.
+    Model fallback chain:
+        llama3-groq-70b (primary) → llama3-groq-8b (fallback on TPD limit)
+
+    Retries transient errors (TPM rate limits, connection errors) with
+    exponential backoff. TPD (daily) limits trigger the fallback chain instead.
     """
     kwargs = {
-        "model": LLM_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            *messages,
-        ],
-        "max_tokens": LLM_MAX_TOKENS,
+        "model":       _current_model(),
+        "messages":    [{"role": "system", "content": system_prompt}, *messages],
+        "max_tokens":  LLM_MAX_TOKENS,
         "temperature": LLM_TEMPERATURE,
     }
     if tools:
-        kwargs["tools"] = tools
+        kwargs["tools"]       = tools
         kwargs["tool_choice"] = "auto"
 
     for attempt in range(_MAX_RETRIES):
+        # Always use the current model (may have changed due to fallback)
+        kwargs["model"] = _current_model()
+
         try:
             response = client.chat.completions.create(**kwargs)
             message  = response.choices[0].message
@@ -86,13 +124,45 @@ def chat(
 
             return {"content": message.content, "tool_call": None}
 
-        except _RETRYABLE as e:
+        except RateLimitError as e:
+            if _is_tpd_limit(e):
+                # Daily limit hit — try the next model in the chain
+                if _fallback_model():
+                    # Retry immediately with the new model (reset attempt counter)
+                    attempt = 0
+                    continue
+                else:
+                    # All models exhausted
+                    return {
+                        "content": (
+                            "I've hit the daily token limit on all available models. "
+                            "Things will reset at midnight UTC. You can also check "
+                            "usage at console.groq.com."
+                        ),
+                        "tool_call": None,
+                    }
+            else:
+                # Per-minute rate limit — back off and retry same model
+                if attempt < _MAX_RETRIES - 1:
+                    wait = 2 ** attempt
+                    print(f"[LLM] Rate limit (TPM), retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    return {
+                        "content": "I'm being rate-limited right now. Please try again in a moment.",
+                        "tool_call": None,
+                    }
+
+        except APIConnectionError as e:
             if attempt < _MAX_RETRIES - 1:
                 wait = 2 ** attempt
-                print(f"[LLM] Retryable error ({e.__class__.__name__}), retrying in {wait}s...")
+                print(f"[LLM] Connection error, retrying in {wait}s... ({e})")
                 time.sleep(wait)
             else:
-                raise
+                return {
+                    "content": "I couldn't reach the AI service. Check your internet connection and try again.",
+                    "tool_call": None,
+                }
 
         except APIStatusError as e:
             error = str(e)
@@ -110,25 +180,32 @@ def chat(
 
             raise
 
-    # Should not reach here
-    raise RuntimeError("[LLM] Exhausted retries without a response")
+    return {"content": "I couldn't get a response — please try again.", "tool_call": None}
 
 
 def quick_extract(prompt: str, system_prompt: str = "") -> str:
     """
     Cheap single-turn call for fact extraction.
     No tools, deterministic, low token budget.
+    Always uses the current active model (respects fallback state).
     """
-    response = client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": system_prompt or "You are a precise data extractor. Output only valid JSON.",
-            },
-            {"role": "user", "content": prompt},
-        ],
-        max_tokens=200,
-        temperature=0.0,
-    )
-    return response.choices[0].message.content or "{}"
+    try:
+        response = client.chat.completions.create(
+            model=_current_model(),
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt or "You are a precise data extractor. Output only valid JSON.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=200,
+            temperature=0.0,
+        )
+        return response.choices[0].message.content or "{}"
+    except RateLimitError as e:
+        if _is_tpd_limit(e):
+            _fallback_model()
+        return "{}"
+    except Exception:
+        return "{}"

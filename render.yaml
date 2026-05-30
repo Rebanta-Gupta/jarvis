@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: jarvis
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false          # set manually in Render dashboard — never in code
+      - key: JARVIS_API_KEY
+        sync: false          # set manually in Render dashboard
+      - key: TIMEZONE
+        value: America/Vancouver
+      - key: ASSISTANT_NAME
+        value: Jarvis
+      - key: LLM_MODEL
+        value: llama-3.3-70b-versatile
+      - key: LLM_MAX_TOKENS
+        value: "512"

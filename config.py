@@ -4,12 +4,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Required ────────────────────────────────────────────────────────────────
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
+LLM_API_KEY = os.getenv("LLM_API_KEY")
+if not LLM_API_KEY:
     raise ValueError(
-        "\n\n[Jarvis] GROQ_API_KEY is not set.\n"
+        "\n\n[Jarvis] LLM_API_KEY is not set.\n"
         "Create a .env file in the project root with:\n"
-        "  GROQ_API_KEY=your_key_here\n"
+        "  LLM_API_KEY=your_key_here\n"
         "Get a free key at https://console.groq.com\n"
     )
 

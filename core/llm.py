@@ -6,9 +6,9 @@ import uuid
 from groq import Groq
 from groq import RateLimitError, APIConnectionError, APIStatusError
 
-from config import GROQ_API_KEY, LLM_MODEL, LLM_MAX_TOKENS, LLM_TEMPERATURE
+from config import LLM_API_KEY, LLM_MODEL, LLM_MAX_TOKENS, LLM_TEMPERATURE
 
-client = Groq(api_key=GROQ_API_KEY)
+client = Groq(api_key=LLM_API_KEY)
 
 _MAX_RETRIES = 3
 

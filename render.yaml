@@ -6,7 +6,7 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
-      - key: GROQ_API_KEY
+      - key: LLM_API_KEY
         sync: false          # set manually in Render dashboard — never in code
       - key: JARVIS_API_KEY
         sync: false          # set manually in Render dashboard

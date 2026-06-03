@@ -4,6 +4,7 @@ import signal
 import threading
 
 from fastapi import FastAPI, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 
@@ -13,6 +14,16 @@ from tools.reminders import start_reminder_watcher
 # ── App & orchestrator ───────────────────────────────────────────────────────
 app = FastAPI(title="Jarvis")
 orc = Orchestrator()
+
+# ── CORS ─────────────────────────────────────────────────────────────────────
+# Allows the web app (opened as a local file or hosted anywhere) to talk to
+# this backend. Requests are still protected by the x-api-key header.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 EXIT_WORDS = {"goodbye", "exit", "quit", "stop", "bye"}
 

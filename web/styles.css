@@ -241,6 +241,33 @@ html, body {
 .modal-btn.secondary { background: var(--bg3); border: 0.5px solid var(--border2); color: var(--text2); }
 .modal-btn.secondary:hover { border-color: var(--accent); color: var(--text); }
 
+/* ── Mic button ───────────────────────────────────────────────────────────── */
+.mic-btn {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  background: var(--bg3);
+  border: 0.5px solid var(--border2);
+  color: var(--text3);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.mic-btn:hover { border-color: var(--accent); color: var(--accent); }
+.mic-btn.recording {
+  background: rgba(127,119,221,0.2);
+  border-color: var(--accent);
+  color: var(--accent);
+  animation: mic-pulse 0.8s infinite;
+}
+@keyframes mic-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(127,119,221,0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(127,119,221,0); }
+}
+
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }

@@ -413,3 +413,88 @@ document.getElementById('btnTestConnection').addEventListener('click', async () 
     el.className = 'connection-status error'; el.textContent = '✗ ' + e.message;
   }
 });
+
+// ── VOICE INPUT ───────────────────────────────────────────────────────────────
+// Uses Web Speech API — works natively on Android Chrome, no libraries needed.
+// Hold to speak, release to send.
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let isRecording = false;
+
+function initRecognition(onResult) {
+  if (!SpeechRecognition) return null;
+  const r = new SpeechRecognition();
+  r.lang = 'en-US';
+  r.interimResults = false;
+  r.maxAlternatives = 1;
+  r.onresult = (e) => {
+    const transcript = e.results[0][0].transcript.trim();
+    if (transcript) onResult(transcript);
+  };
+  r.onerror = (e) => {
+    console.warn('[Voice]', e.error);
+    isRecording = false;
+    document.querySelectorAll('.mic-btn').forEach(b => b.classList.remove('recording'));
+  };
+  r.onend = () => {
+    isRecording = false;
+    document.querySelectorAll('.mic-btn').forEach(b => b.classList.remove('recording'));
+  };
+  return r;
+}
+
+function startRecording(micBtn, onResult) {
+  if (!SpeechRecognition) {
+    alert('Voice input is not supported in this browser. Use Chrome on Android.');
+    return;
+  }
+  if (isRecording) return;
+  recognition = initRecognition(onResult);
+  if (!recognition) return;
+  isRecording = true;
+  micBtn.classList.add('recording');
+  setOrbState('listening');
+  recognition.start();
+}
+
+function stopRecording() {
+  if (recognition && isRecording) {
+    recognition.stop();
+  }
+  isRecording = false;
+  document.querySelectorAll('.mic-btn').forEach(b => b.classList.remove('recording'));
+  setOrbState('idle');
+}
+
+function attachMicBtn(btnId, onResult) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+
+  // Touch (mobile)
+  btn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    startRecording(btn, onResult);
+  }, { passive: false });
+  btn.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    stopRecording();
+  }, { passive: false });
+
+  // Mouse (desktop testing)
+  btn.addEventListener('mousedown', () => startRecording(btn, onResult));
+  btn.addEventListener('mouseup',   () => stopRecording());
+  btn.addEventListener('mouseleave',() => { if (isRecording) stopRecording(); });
+}
+
+// Attach to orb mic button
+attachMicBtn('orbMic', (transcript) => {
+  document.getElementById('orbInput').value = transcript;
+  orbSend();
+});
+
+// Attach to chat mic button
+attachMicBtn('chatMic', (transcript) => {
+  document.getElementById('chatInput').value = transcript;
+  chatSend();
+});

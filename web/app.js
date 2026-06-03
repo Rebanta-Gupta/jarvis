@@ -266,7 +266,7 @@ function loadNotes(filter = '') {
     !q || n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q)
   );
   if (!items.length) {
-    list.innerHTML = `<div class="empty-state"><div>📝</div><span>${filter ? `No notes match "${filter}"` : 'No notes yet. Hit + to add one.'}</span></div>`;
+    list.innerHTML = `<div class="empty-state"><div>📝</div><span>${filter ? `No notes match "${filter}"` : 'No notes yet. Click + to add one.'}</span></div>`;
     return;
   }
   list.innerHTML = [...items].reverse().map(n => `
@@ -323,7 +323,7 @@ function loadReminders() {
   const fired    = remindersCache.filter(r =>  r.fired).slice(-3);
   const all      = [...upcoming, ...fired];
   if (!all.length) {
-    list.innerHTML = `<div class="empty-state"><div>⏰</div><span>No reminders. Hit + to add one.</span></div>`;
+    list.innerHTML = `<div class="empty-state"><div>⏰</div><span>No reminders. Click + to add one.</span></div>`;
     return;
   }
   list.innerHTML = all.map(r => {

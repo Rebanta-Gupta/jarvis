@@ -120,6 +120,9 @@ class Orchestrator:
             result = chat(self.history, tools=TOOL_DEFINITIONS, system_prompt=system_prompt)
 
         reply = result["content"] or "I couldn't come up with a response — please try again."
+        # Strip any raw tool call syntax that leaked into the reply
+        import re as _re
+        reply = _re.sub(r"<function=\w+>[\s\S]*?</function>", "", reply).strip()
         self._save_turn(user_input, reply)
         return reply
 
